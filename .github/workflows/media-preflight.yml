@@ -1,0 +1,100 @@
+# Dedicated demonstration prerequisite. This is not the automatic PR tour workflow.
+name: GitHub media preflight
+on:
+  workflow_dispatch:
+permissions: {}
+jobs:
+  media:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Fetch the exact trusted demo revision
+        env:
+          DEMO_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DEMO_SHA" =~ ^[a-f0-9]{40}$ ]]
+          mkdir -p "$RUNNER_TEMP/media-source" "$RUNNER_TEMP/media-evidence"
+          curl --fail --silent --show-error --location \
+            "https://codeload.github.com/nishilfaldu/pro-tour-task-board-demo-20260924-122700/tar.gz/$DEMO_SHA" \
+            --output "$RUNNER_TEMP/media-source.tar.gz"
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, tarfile
+          temporary = pathlib.Path(os.environ['RUNNER_TEMP'])
+          with tarfile.open(temporary / 'media-source.tar.gz') as archive:
+              archive.extractall(temporary / 'media-source', filter='data')
+          roots = list((temporary / 'media-source').iterdir())
+          assert len(roots) == 1
+          root = roots[0] / '.pro-tour/preflight'
+          manifest = json.loads((root / 'source-manifest.json').read_text())
+          for name, digest in manifest['source_sha256'].items():
+              assert hashlib.sha256((root / name).read_bytes()).hexdigest() == digest
+          with open(os.environ['GITHUB_ENV'], 'a') as stream:
+              stream.write(f'PRO_TOUR_PREFLIGHT={root}\nPYTHONPATH={root}/src\n')
+          (temporary / 'media-evidence/source-manifest.json').write_text(json.dumps(manifest, indent=2))
+          PY
+      - name: Install verified GitHub CLI in the trusted image
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PRO_TOUR_PREFLIGHT"
+          curl --fail --silent --show-error --location \
+            https://github.com/cli/cli/releases/download/v2.101.0/gh_2.101.0_linux_amd64.tar.gz \
+            --output "$RUNNER_TEMP/gh-linux-amd64.tar.gz"
+          python3 scripts/prepare_github_media.py \
+            --archive "$RUNNER_TEMP/gh-linux-amd64.tar.gz" --platform linux_amd64 \
+            --output "$RUNNER_TEMP/media-evidence/media-image.json"
+      - name: Upload and reread two preflight attachments
+        env:
+          GH_MEDIA_TOKEN: ${{ secrets.GH_MEDIA_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PRO_TOUR_PREFLIGHT"
+          python3 - <<'PY'
+          import json, os, pathlib, runpy, tempfile
+          token = os.environ.pop('GH_MEDIA_TOKEN')
+          evidence = pathlib.Path(os.environ['RUNNER_TEMP']) / 'media-evidence'
+          image = json.loads((evidence / 'media-image.json').read_text())['image_id']
+          check = runpy.run_path('scripts/check_github_media.py')['check']
+          with tempfile.TemporaryDirectory(prefix='pro-tour-media-key-') as temporary:
+              key_file = pathlib.Path(temporary) / 'credential'
+              with key_file.open('x') as stream:
+                  key_file.chmod(0o600)
+                  stream.write('GH_MEDIA_TOKEN=' + token + '\n')
+              del token
+              code = check(image, evidence / 'media-preflight.json', key_file,
+                           'nishilfaldu/pro-tour-task-board-demo-20260924-122700', 1)
+          raise SystemExit(code)
+          PY
+      - name: Record runner and cleanup status
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, platform, subprocess, sys
+          evidence = pathlib.Path(os.environ['RUNNER_TEMP']) / 'media-evidence'
+          evidence.mkdir(exist_ok=True)
+          report = {
+              'python': sys.version, 'platform': platform.platform(),
+              'architecture': platform.machine(), 'run_id': os.environ['GITHUB_RUN_ID'],
+              'event': os.environ['GITHUB_EVENT_NAME'], 'demo_sha': os.environ['GITHUB_SHA'],
+              'full_pipeline_verified': False,
+          }
+          for name, args in {
+              'remaining_containers': ['docker', 'ps', '-aq', '--filter', 'label=pro-tour.session'],
+              'remaining_volumes': ['docker', 'volume', 'ls', '-q', '--filter', 'label=pro-tour.session'],
+          }.items():
+              report[name] = subprocess.check_output(args, text=True).splitlines()
+          (evidence / 'runner.json').write_text(json.dumps(report, indent=2))
+          assert not report['remaining_containers'] and not report['remaining_volumes']
+          PY
+      - name: Retain sanitized prerequisite evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: github-media-preflight
+          path: ${{ runner.temp }}/media-evidence/*.json
+          retention-days: 30
