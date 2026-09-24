@@ -1,0 +1,16 @@
+{
+  "implementation_commit": "8ddf41af6c8d6c7cf4c58dcf658c218f3c5a7d09",
+  "scope": "Only newly authored Pro Tour media preflight code; no unrelated private repository files.",
+  "source_sha256": {
+    "src/pro_tour/__init__.py": "c4a6588c2810327ebbd799d99aef5ac8773519b0c13bd2665b904c01ae208458",
+    "src/pro_tour/evidence.py": "6fea116b628331ca1e9c0c4b164ba72117857697afca7ca944a4b766ce291646",
+    "src/pro_tour/sandbox.py": "78cbffca872f3a532addc8bf186e2bac528cf0fe2f4fc3ee86c487ec4809aa88",
+    "src/pro_tour/egress_proxy.py": "477072b2e77e56dd14d7d0421173dae6615edee75589c14e56c40d38c7d1d231",
+    "src/pro_tour/github_media.py": "79382fbfdd5834955871ebda911a26cf0afa5cf15ba34a3c7ec8e24efd1b72ae",
+    "scripts/check_github_media.py": "3a143db575174977c5a566684624aa4a084179761e9e930df96d431050d3e3fd",
+    "scripts/prepare_github_media.py": "d9a0bee0781c42b700e8412856751bb5764dcf923cf24c0121c6b0daf8d2e586",
+    "containers/github-media/Dockerfile": "87f1c5c685617df2ff606cc913dacfd1e321e0447820a01c1f771e5b27dbdddf",
+    "containers/github-media/runtime.py": "93a627e4da22f10c4c78fcc03b53a59b204dfad76d8e5960fa2e2ba7ac8898f4",
+    "containers/github-media/gateway.py": "6e92219a8b0058873eab72ab38bfd21837d04a94decb1077cdd2830d8ffed45f"
+  }
+}
